@@ -9,10 +9,13 @@ export const protect = async (req, res, next) => {
     req.headers.authorization &&
     req.headers.authorization.startsWith("Bearer")
   ) {
-    try {
-      // Get token from header
-      token = req.headers.authorization.split(" ")[1];
+    token = req.headers.authorization.split(" ")[1];
+  } else if (req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  }
 
+  if (token) {
+    try {
       // Verify token
       const decoded = jwt.verify(
         token,
@@ -29,7 +32,7 @@ export const protect = async (req, res, next) => {
         });
       }
 
-      next();
+      return next();
     } catch (error) {
       console.error("Auth Middleware Error:", error.message);
       return res.status(401).json({
@@ -39,18 +42,19 @@ export const protect = async (req, res, next) => {
     }
   }
 
-  if (!token) {
-    return res.status(401).json({
-      success: false,
-      message: "Not authorized, no token provided",
-    });
-  }
+  return res.status(401).json({
+    success: false,
+    message: "Not authorized, no token provided",
+  });
 };
 
 // Grant access to specific roles
 export const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    const userRole = req.user?.role?.toUpperCase();
+    const normalizedRoles = roles.map((r) => r.toUpperCase());
+
+    if (!req.user || !normalizedRoles.includes(userRole)) {
       return res.status(403).json({
         success: false,
         message: `User role '${req.user?.role}' is not authorized to access this route`,
