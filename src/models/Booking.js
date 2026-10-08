@@ -32,12 +32,24 @@ const bookingSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["PROVISIONAL", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED"],
-      default: "PROVISIONAL",
+      enum: [
+        "PROVISIONAL",
+        "PENDING_PAYMENT",
+        "PAID",
+        "CONFIRMED",
+        "ACTIVE",
+        "COMPLETED",
+        "CANCELLED",
+        "EXPIRED",
+      ],
+      default: "PENDING_PAYMENT",
+    },
+    holdExpiresAt: {
+      type: Date,
     },
     paymentStatus: {
       type: String,
-      enum: ["PENDING", "PAID", "FAILED", "REFUNDED"],
+      enum: ["PENDING", "PAID", "FAILED", "REFUNDED", "EXPIRED"],
       default: "PENDING",
     },
     paymentDetails: {
@@ -55,6 +67,30 @@ const bookingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    completedAt: {
+      type: Date,
+    },
+    returnNotes: {
+      type: String,
+      trim: true,
+    },
+    damageReported: {
+      type: Boolean,
+      default: false,
+    },
+    fuelLevel: {
+      type: String,
+    },
+    mileage: {
+      type: Number,
+    },
+    cancellationReason: {
+      type: String,
+      trim: true,
+    },
+    idempotencyKey: {
+      type: String,
+    },
   },
   { timestamps: true }
 );
@@ -63,5 +99,6 @@ const bookingSchema = new mongoose.Schema(
 bookingSchema.index({ car: 1, startDate: 1, endDate: 1, status: 1 });
 bookingSchema.index({ customer: 1, createdAt: -1 });
 bookingSchema.index({ "paymentDetails.barayOrderId": 1 }); // fast lookup by Baray order_id
+bookingSchema.index({ holdExpiresAt: 1, status: 1 }); // fast lookup for 15-minute expiration worker
 
 export const Booking = mongoose.model("Booking", bookingSchema);

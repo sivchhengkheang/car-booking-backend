@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { Booking } from "../models/Booking.js";
 import { Payment } from "../models/Payment.js";
+import { releaseCarLock, invalidateCarCache } from "../services/redisService.js";
 
 // ---------------------------------------------------------------------------
 // Baray AES-256-CBC Decryption
@@ -52,10 +53,15 @@ export const barayWebhook = async (req, res) => {
 
     console.log(`Baray webhook received — orderId: ${orderId}, bank: ${bank}`);
 
-    // Look up the booking by barayOrderId
-    const booking = await Booking.findOne({
+    // Look up the booking by barayOrderId, or via payment record
+    let booking = await Booking.findOne({
       "paymentDetails.barayOrderId": orderId,
     });
+
+    let payment = await Payment.findOne({ barayOrderId: orderId });
+    if (!booking && payment?.booking) {
+      booking = await Booking.findById(payment.booking);
+    }
 
     if (!booking) {
       console.warn(`Baray webhook: no booking found for orderId=${orderId}`);
@@ -64,7 +70,6 @@ export const barayWebhook = async (req, res) => {
 
     // Update or create payment record in the payments collection
     const paidDate = new Date();
-    let payment = await Payment.findOne({ barayOrderId: orderId });
     if (payment) {
       payment.status = "COMPLETED";
       payment.bank = bank || null;
@@ -98,6 +103,15 @@ export const barayWebhook = async (req, res) => {
     booking.paymentDetails.paidAt = paidDate;
 
     await booking.save();
+
+    // Release temporary 15-minute checkout lock & invalidate car caches
+    if (booking.car) {
+      const carId = booking.car._id
+        ? booking.car._id.toString()
+        : booking.car.toString();
+      await releaseCarLock(carId);
+      await invalidateCarCache(carId);
+    }
 
     console.log(`Booking ${booking._id} confirmed & Payment ${payment._id} updated via Baray webhook (bank: ${bank})`);
 

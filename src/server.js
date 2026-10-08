@@ -6,9 +6,13 @@ import path from "path";
 import { dbConnection } from "./config/db.js";
 
 import authRouter from "./routers/authRouter.js";
+import userRouter from "./routers/userRouter.js";
 import carRouter from "./routers/carRouter.js";
 import bookingRouter from "./routers/bookingRouter.js";
 import paymentRouter from "./routers/paymentRouter.js";
+import adminRouter from "./routers/adminRouter.js";
+import { getHealth } from "./controllers/adminController.js";
+import { startBookingCleanupWorker } from "./services/bookingCleanupService.js";
 
 dotenv.config();
 
@@ -79,12 +83,15 @@ app.use(cors(corsOptions));
 app.get("/", (req, res) => {
   res.status(200).json({ status: "OK", message: "Car Booking API Server is running" });
 });
+app.get("/api/v1/health", getHealth);
 
 // API Routes
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/users", userRouter);
 app.use("/api/v1/cars", carRouter);
 app.use("/api/v1/bookings", bookingRouter);
 app.use("/api/v1/payments", paymentRouter);
+app.use("/api/v1/admin", adminRouter);
 
 // Alias routes for /api/auth
 app.use("/api/auth", authRouter);
@@ -106,6 +113,9 @@ app.use((err, req, res, next) => {
 const start = async () => {
   try {
     await dbConnection();
+
+    // Start background worker to delete expired pending bookings (>15 mins)
+    startBookingCleanupWorker(60 * 1000);
 
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);

@@ -76,11 +76,20 @@ const carSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    status: {
+      type: String,
+      enum: ["AVAILABLE", "UNAVAILABLE", "MAINTENANCE"],
+      default: "AVAILABLE",
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
 
 // Index for search/filter queries
-carSchema.index({ brand: 1, isAvailable: 1, pricePerDay: 1 });
+carSchema.index({ brand: 1, isAvailable: 1, status: 1, isDeleted: 1, pricePerDay: 1 });
 
 export const Car = mongoose.model("Car", carSchema);
