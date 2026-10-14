@@ -193,6 +193,19 @@ export const createBooking = async (req, res) => {
     const totalPrice = totalDays * car.pricePerDay;
     const holdExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
+    // Cancel any previous pending checkout hold by this user for this car
+    await Booking.updateMany(
+      {
+        customer: req.user._id,
+        car: carId,
+        status: { $in: ["PROVISIONAL", "PENDING_PAYMENT"] },
+      },
+      {
+        status: "CANCELLED",
+        cancellationReason: "Replaced by new reservation dates",
+      }
+    );
+
     const booking = await Booking.create({
       customer: req.user._id,
       car: carId,

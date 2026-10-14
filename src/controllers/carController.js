@@ -334,7 +334,7 @@ export const getCarBookedDates = async (req, res) => {
           holdExpiresAt: { $gt: now },
         },
       ],
-    }).select("startDate endDate");
+    }).select("startDate endDate customer status holdExpiresAt");
 
     // Check if car currently has an active 15-minute checkout reservation hold
     const activeLock = await getCarLock(req.params.id);
@@ -346,13 +346,33 @@ export const getCarBookedDates = async (req, res) => {
         ? {
             isHeld: true,
             expiresAt: activeLock.expiresAt,
+            customerId: activeLock.customerId || null,
           }
         : null,
       holdExpiresAt: activeLock ? activeLock.expiresAt : null,
     };
 
+    // Calculate adaptive TTL: do not cache beyond the soonest hold expiration
+    let ttl = CACHE_TTL.BOOKED_DATES;
+    if (activeLock && activeLock.expiresAt) {
+      const lockRemaining = Math.max(
+        5,
+        Math.floor((new Date(activeLock.expiresAt).getTime() - Date.now()) / 1000)
+      );
+      ttl = Math.min(ttl, lockRemaining);
+    }
+    for (const b of bookings) {
+      if (b.holdExpiresAt) {
+        const holdRemaining = Math.max(
+          5,
+          Math.floor((new Date(b.holdExpiresAt).getTime() - Date.now()) / 1000)
+        );
+        ttl = Math.min(ttl, holdRemaining);
+      }
+    }
+
     // 2. Cache booked dates in Redis
-    await setCache(cacheKey, responseData, CACHE_TTL.BOOKED_DATES);
+    await setCache(cacheKey, responseData, ttl);
 
     return res.status(200).json(responseData);
   } catch (error) {
