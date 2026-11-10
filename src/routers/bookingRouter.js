@@ -9,6 +9,7 @@ import {
   confirmBookingPickup,
   completeBooking,
   cancelBooking,
+  extendBookingHold,
   createBookingReview,
 } from "../controllers/bookingController.js";
 import { protect, authorize } from "../middlewares/authMiddleware.js";
@@ -33,6 +34,7 @@ router.get("/:id", protect, getBookingById);
 
 // Lifecycle actions
 router.patch("/:id/cancel", protect, cancelBooking);
+router.patch("/:id/extend", protect, extendBookingHold);
 router.patch("/:id/confirm", protect, authorize("HOST", "ADMIN"), confirmBookingPickup);
 router.patch("/:id/complete", protect, authorize("HOST", "ADMIN"), completeBooking);
 

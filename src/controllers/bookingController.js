@@ -698,6 +698,135 @@ export const cancelBooking = async (req, res) => {
   }
 };
 
+// @desc    Extend / update return date of an active provisional booking hold
+// @route   PATCH /api/v1/bookings/:id/extend
+// @access  Customer (Owner) / Admin
+export const extendBookingHold = async (req, res) => {
+  try {
+    const { newEndDate } = req.body;
+    if (!newEndDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid newEndDate",
+      });
+    }
+
+    const booking = await Booking.findById(req.params.id).populate("car");
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking record not found",
+      });
+    }
+
+    const isCustomer = booking.customer.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === "ADMIN";
+    if (!isCustomer && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to modify this booking",
+      });
+    }
+
+    if (!["PENDING_PAYMENT", "PROVISIONAL"].includes(booking.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Only pending reservations can be extended. Current status is ${booking.status}`,
+      });
+    }
+
+    const start = new Date(booking.startDate);
+    const end = new Date(newEndDate);
+
+    if (isNaN(end.getTime()) || end <= start) {
+      return res.status(400).json({
+        success: false,
+        message: "New return date must be valid and after the pick-up date",
+      });
+    }
+
+    const carId = booking.car._id.toString();
+    const now = new Date();
+
+    // Check conflict with other bookings (excluding this booking)
+    const overlappingBooking = await Booking.findOne({
+      _id: { $ne: booking._id },
+      car: carId,
+      startDate: { $lt: end },
+      endDate: { $gt: start },
+      $or: [
+        { status: { $in: ["PAID", "CONFIRMED", "ACTIVE"] } },
+        {
+          status: { $in: ["PROVISIONAL", "PENDING_PAYMENT"] },
+          holdExpiresAt: { $gt: now },
+          customer: { $ne: req.user._id },
+        },
+      ],
+    });
+
+    if (overlappingBooking) {
+      return res.status(409).json({
+        success: false,
+        message: "The vehicle is already booked by another customer for the requested extension dates",
+      });
+    }
+
+    const prevDays = booking.totalDays || 1;
+    // Recalculate duration & price
+    const diffTime = Math.abs(end - start);
+    const totalDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    const dailyRate = booking.car.pricePerDay || 35;
+    const totalPrice = totalDays * dailyRate;
+    const holdExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    booking.endDate = end;
+    booking.totalDays = totalDays;
+    booking.totalPrice = totalPrice;
+    booking.holdExpiresAt = holdExpiresAt;
+    await booking.save();
+
+    // Re-acquire / update 15-minute lock in Redis
+    await acquireCarLock(carId, {
+      bookingId: booking._id.toString(),
+      customerId: req.user._id.toString(),
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+    });
+
+    await invalidateCarCache(carId);
+
+    const updatedBooking = await Booking.findById(booking._id)
+      .populate("car")
+      .populate("customer", "name email phoneNumber");
+
+    const message =
+      totalDays < prevDays
+        ? `Booking successfully reduced to ${totalDays} ${totalDays === 1 ? 'day' : 'days'}`
+        : totalDays > prevDays
+          ? `Booking successfully extended to ${totalDays} days`
+          : `Booking dates successfully updated to ${totalDays} days`;
+
+    return res.status(200).json({
+      success: true,
+      message,
+      booking: updatedBooking,
+      holdExpiresAt,
+    });
+  } catch (error) {
+    console.error("Extend Booking Error:", error);
+    if (error.kind === "ObjectId") {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found - invalid ID format",
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Server error while extending booking",
+    });
+  }
+};
+
 // @desc    Customer review for completed booking
 // @route   POST /api/v1/bookings/:id/review
 // @access  Customer (Owner)

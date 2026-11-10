@@ -151,7 +151,13 @@ export const checkoutPayment = async (req, res) => {
     const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
     const successUrl =
       rawBody.successUrl ||
-      `${clientUrl}/booking/success?bookingId=${booking._id}`;
+      `${clientUrl}/booking/success?bookingId=${booking._id}&paid=true`;
+    const cancelUrl =
+      rawBody.cancelUrl ||
+      `${clientUrl}/booking/checkout?bookingId=${booking._id}&paymentStatus=cancelled`;
+    const failureUrl =
+      rawBody.failureUrl ||
+      `${clientUrl}/booking/checkout?bookingId=${booking._id}&paymentStatus=failed`;
 
     // Build the payload to encrypt (per Baray spec)
     const payload = {
@@ -172,6 +178,10 @@ export const checkoutPayment = async (req, res) => {
         ],
       },
       custom_success_url: successUrl,
+      custom_cancel_url: cancelUrl,
+      cancel_url: cancelUrl,
+      custom_failure_url: failureUrl,
+      failure_url: failureUrl,
     };
 
     // Encrypt the payload with AES-256-CBC
@@ -512,6 +522,50 @@ export const refundPayment = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Server error while processing refund",
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// @desc    Validate promotional discount voucher code
+// @route   POST /api/v1/payments/validate-promo
+// @access  Public
+// ---------------------------------------------------------------------------
+export const validatePromo = async (req, res) => {
+  try {
+    const rawCode = (req.body?.code || req.query?.code || "").trim().toUpperCase();
+
+    if (!rawCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a promo code",
+      });
+    }
+
+    const PROMO_CODES = {
+      DRIVEKH10: { code: "DRIVEKH10", percent: 10, label: "10% Off Special" },
+      WELCOME20: { code: "WELCOME20", amount: 20, label: "$20 Welcome Voucher" },
+      KHQRVIP: { code: "KHQRVIP", percent: 15, label: "15% Baray VIP Discount" },
+    };
+
+    const promo = PROMO_CODES[rawCode];
+
+    if (!promo) {
+      return res.status(404).json({
+        success: false,
+        message: "Invalid or expired promo code",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Promo code applied successfully",
+      promo,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to validate promo code",
     });
   }
 };

@@ -6,11 +6,16 @@ import {
   getPaymentById,
   getPaymentByBooking,
   refundPayment,
+  validatePromo,
 } from "../controllers/paymentController.js";
 import { barayWebhook } from "../controllers/barayWebhookController.js";
 import { protect, authorize } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
+
+// Validate promotional discount code
+router.post("/validate-promo", validatePromo);
+router.get("/validate-promo", validatePromo);
 
 // Customer route — creates Baray payment intent and returns paymentUrl
 router.post(
