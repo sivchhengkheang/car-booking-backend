@@ -40,6 +40,10 @@ JWT_SECRET=<your-jwt-secret>
 BARAY_API_KEY=<your-baray-api-key>
 BARAY_SK=<your-baray-secret-key>
 BARAY_IV=<your-baray-iv>
+
+KOOMPI_STORAGE_BASE_URL=https://api-kconsole.koompi.cloud
+KOOMPI_STORAGE_API_KEY=<your-koompi-bucket-api-key>
+
 ```
 
 ## Getting Started

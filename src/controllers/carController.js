@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import mongoose from "mongoose";
 import { Car } from "../models/Car.js";
 import { Booking } from "../models/Booking.js";
@@ -9,6 +11,53 @@ import {
   getCarLock,
   CACHE_TTL,
 } from "../services/redisService.js";
+import {
+  isKoompiStorageConfigured,
+  uploadFileToKoompi,
+  deleteFileFromKoompi,
+} from "../services/koompiStorageService.js";
+
+/**
+ * Uploads files to KOOMPI Cloud Storage (or falls back to local disk if unconfigured).
+ */
+const processUploadedFiles = async (files) => {
+  if (!files || files.length === 0) return [];
+
+  const useKoompi = isKoompiStorageConfigured();
+  const urls = [];
+
+  for (const file of files) {
+    if (useKoompi) {
+      try {
+        const uploaded = await uploadFileToKoompi({
+          buffer: file.buffer,
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size,
+          path: "cars",
+        });
+        urls.push(uploaded.url);
+        continue;
+      } catch (err) {
+        console.error("[CarController] KOOMPI upload failed, falling back to local storage:", err.message);
+      }
+    }
+
+    // Fallback: save buffer to local /uploads/cars/
+    const uploadDir = path.join(process.cwd(), "uploads", "cars");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname || ".jpg");
+    const filename = `car-${uniqueSuffix}${ext}`;
+    const filePath = path.join(uploadDir, filename);
+    await fs.promises.writeFile(filePath, file.buffer);
+    urls.push(`/uploads/cars/${filename}`);
+  }
+
+  return urls;
+};
 
 // @desc    Add a new car with photo uploads
 // @route   POST /api/v1/cars
@@ -33,7 +82,7 @@ export const createCar = async (req, res) => {
     // Process photo uploads
     let photos = [];
     if (req.files && req.files.length > 0) {
-      photos = req.files.map((file) => `/uploads/cars/${file.filename}`);
+      photos = await processUploadedFiles(req.files);
     } else if (req.body.photos) {
       photos = Array.isArray(req.body.photos)
         ? req.body.photos
@@ -511,7 +560,7 @@ export const updateCar = async (req, res) => {
     // Photos update
     let newPhotos = [];
     if (req.files && req.files.length > 0) {
-      newPhotos = req.files.map((file) => `/uploads/cars/${file.filename}`);
+      newPhotos = await processUploadedFiles(req.files);
     }
 
     if (req.body.photos !== undefined) {
@@ -792,11 +841,18 @@ export const deleteCarPhoto = async (req, res) => {
 
     const decodedTarget = decodeURIComponent(photoId);
     // Support photoId as index (0, 1, ...) or by path/filename match
+    let removedPhotos = [];
     const photoIndex = Number(photoId);
     if (!isNaN(photoIndex) && photoIndex >= 0 && photoIndex < car.photos.length) {
-      car.photos.splice(photoIndex, 1);
+      removedPhotos = car.photos.splice(photoIndex, 1);
     } else {
+      removedPhotos = car.photos.filter((p) => p.includes(decodedTarget));
       car.photos = car.photos.filter((p) => !p.includes(decodedTarget));
+    }
+
+    // Clean up deleted photo from storage if on KOOMPI
+    for (const photo of removedPhotos) {
+      deleteFileFromKoompi(photo).catch(() => {});
     }
 
     await car.save();
