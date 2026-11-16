@@ -14,6 +14,12 @@ const userSchema = new mongoose.Schema(
         sub: { type: String, unique: true, sparse: true, index: true },
         kid: { type: String, sparse: true },
         walletAddress: { type: String, sparse: true },
+        telegramUsername: { type: String, default: "" },
+        telegramId: { type: String, default: "" },
+        picture: { type: String, default: "" },
+        preferredUsername: { type: String, default: "" },
+        emailVerified: { type: Boolean, default: false },
+        phoneVerified: { type: Boolean, default: false },
         role: {
             type: String,
             enum: ["CUSTOMER", "HOST", "ADMIN"],

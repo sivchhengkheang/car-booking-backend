@@ -33,7 +33,9 @@ app.use(cookiesParser());
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 // Configure CORS
-const rawClientUrls = process.env.CLIENT_URL || "http://localhost:3000,http://localhost:3001";
+const rawClientUrls =
+  process.env.CLIENT_URL ||
+  "http://localhost:3000,http://localhost:3001,https://car-rental-service-eta.vercel.app";
 const allowedOrigins = rawClientUrls
   .split(",")
   .map((s) => s.trim().replace(/\/+$/, ""))

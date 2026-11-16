@@ -99,7 +99,15 @@ export const protect = async (req, res, next) => {
             if (user) {
               user.sub = kidUser.sub;
               if (kidUser.kid) user.kid = kidUser.kid;
-              if (kidUser.wallet?.address) user.walletAddress = kidUser.wallet.address;
+              if (kidUser.wallet_address || kidUser.wallet?.address) {
+                user.walletAddress = kidUser.wallet_address || kidUser.wallet.address;
+              }
+              if (kidUser.telegram_username) user.telegramUsername = kidUser.telegram_username;
+              if (kidUser.telegram_id) user.telegramId = String(kidUser.telegram_id);
+              if (kidUser.picture) user.picture = kidUser.picture;
+              if (kidUser.preferred_username) user.preferredUsername = kidUser.preferred_username;
+              if (typeof kidUser.email_verified === "boolean") user.emailVerified = kidUser.email_verified;
+              if (typeof kidUser.phone_number_verified === "boolean") user.phoneVerified = kidUser.phone_number_verified;
               await user.save();
             }
           }
@@ -109,13 +117,34 @@ export const protect = async (req, res, next) => {
             user = await User.create({
               sub: kidUser.sub,
               kid: kidUser.kid || "",
-              walletAddress: kidUser.wallet?.address || "",
+              walletAddress: kidUser.wallet_address || kidUser.wallet?.address || "",
               name: kidUser.name || (kidUser.kid ? `KID User #${kidUser.kid}` : "KID Customer"),
               email: (kidUser.email || `${kidUser.sub}@kid.user`).toLowerCase(),
-              phoneNumber: kidUser.phone || kidUser.phoneNumber || "",
+              emailVerified: Boolean(kidUser.email_verified || kidUser.email),
+              phoneNumber: kidUser.phone || kidUser.phone_number || kidUser.phoneNumber || "",
+              phoneVerified: Boolean(kidUser.phone_number_verified),
+              telegramUsername: kidUser.telegram_username || "",
+              telegramId: kidUser.telegram_id ? String(kidUser.telegram_id) : "",
+              picture: kidUser.picture || "",
+              preferredUsername: kidUser.preferred_username || "",
               role: "CUSTOMER",
               status: "ACTIVE",
             });
+          } else {
+            let hasChanges = false;
+            if (kidUser.kid && user.kid !== kidUser.kid) { user.kid = kidUser.kid; hasChanges = true; }
+            if (kidUser.name && user.name !== kidUser.name && !user.name.startsWith("Host")) { user.name = kidUser.name; hasChanges = true; }
+            if ((kidUser.wallet_address || kidUser.wallet?.address) && user.walletAddress !== (kidUser.wallet_address || kidUser.wallet.address)) {
+              user.walletAddress = kidUser.wallet_address || kidUser.wallet.address;
+              hasChanges = true;
+            }
+            if (kidUser.telegram_username && user.telegramUsername !== kidUser.telegram_username) { user.telegramUsername = kidUser.telegram_username; hasChanges = true; }
+            if (kidUser.telegram_id && user.telegramId !== String(kidUser.telegram_id)) { user.telegramId = String(kidUser.telegram_id); hasChanges = true; }
+            if (kidUser.picture && user.picture !== kidUser.picture) { user.picture = kidUser.picture; hasChanges = true; }
+            if (kidUser.preferred_username && user.preferredUsername !== kidUser.preferred_username) { user.preferredUsername = kidUser.preferred_username; hasChanges = true; }
+            if (typeof kidUser.email_verified === "boolean" && user.emailVerified !== kidUser.email_verified) { user.emailVerified = kidUser.email_verified; hasChanges = true; }
+            if (typeof kidUser.phone_number_verified === "boolean" && user.phoneVerified !== kidUser.phone_number_verified) { user.phoneVerified = kidUser.phone_number_verified; hasChanges = true; }
+            if (hasChanges) await user.save();
           }
 
           if (user.status === "SUSPENDED") {

@@ -28,12 +28,18 @@ const formatUserResponse = (user) => {
     _id: user._id,
     name: user.name,
     email: user.email,
+    emailVerified: Boolean(user.emailVerified),
     role: user.role,
     status: user.status || "ACTIVE",
     sub: user.sub || null,
     kid: user.kid || null,
     walletAddress: user.walletAddress || null,
     phoneNumber: user.phoneNumber,
+    phoneVerified: Boolean(user.phoneVerified),
+    telegramUsername: user.telegramUsername || null,
+    telegramId: user.telegramId || null,
+    picture: user.picture || null,
+    preferredUsername: user.preferredUsername || null,
     driverLicense: user.driverLicense,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
@@ -536,8 +542,14 @@ export const kidLogin = async (req, res) => {
       kid,
       name,
       email,
+      emailVerified,
       phoneNumber,
+      phoneVerified,
       walletAddress,
+      telegramUsername,
+      telegramId,
+      picture,
+      preferredUsername,
       merged_from,
     } = req.body;
 
@@ -560,6 +572,7 @@ export const kidLogin = async (req, res) => {
     const finalKid = kidProfile?.kid || kid || "";
     const finalName =
       kidProfile?.name ||
+      (kidProfile?.given_name ? `${kidProfile.given_name} ${kidProfile.family_name || ""}`.trim() : "") ||
       name ||
       (finalKid ? `KID User #${finalKid}` : "KID Customer");
     const finalEmail = (
@@ -567,9 +580,24 @@ export const kidLogin = async (req, res) => {
       email ||
       `${sub}@kid.user`
     ).toLowerCase();
+    const finalEmailVerified =
+      kidProfile?.email_verified ?? emailVerified ?? Boolean(kidProfile?.email || email);
     const finalPhone =
-      kidProfile?.phone || kidProfile?.phoneNumber || phoneNumber || "";
-    const finalWallet = kidProfile?.wallet?.address || walletAddress || "";
+      kidProfile?.phone || kidProfile?.phone_number || kidProfile?.phoneNumber || phoneNumber || "";
+    const finalPhoneVerified =
+      kidProfile?.phone_number_verified ?? phoneVerified ?? false;
+    const finalWallet =
+      kidProfile?.wallet_address || kidProfile?.wallet?.address || walletAddress || "";
+    const finalTelegramUsername =
+      kidProfile?.telegram_username || telegramUsername || "";
+    const finalTelegramId = kidProfile?.telegram_id
+      ? String(kidProfile.telegram_id)
+      : telegramId
+      ? String(telegramId)
+      : "";
+    const finalPicture = kidProfile?.picture || picture || "";
+    const finalPreferredUsername =
+      kidProfile?.preferred_username || preferredUsername || "";
 
     // 2. Handle merged accounts per KID Rule 4:
     const mergedList = kidProfile?.merged_from || merged_from;
@@ -593,6 +621,12 @@ export const kidLogin = async (req, res) => {
         user.sub = sub;
         if (finalKid) user.kid = finalKid;
         if (finalWallet) user.walletAddress = finalWallet;
+        if (finalTelegramUsername) user.telegramUsername = finalTelegramUsername;
+        if (finalTelegramId) user.telegramId = finalTelegramId;
+        if (finalPicture) user.picture = finalPicture;
+        if (finalPreferredUsername) user.preferredUsername = finalPreferredUsername;
+        if (typeof finalEmailVerified === "boolean") user.emailVerified = finalEmailVerified;
+        if (typeof finalPhoneVerified === "boolean") user.phoneVerified = finalPhoneVerified;
         await user.save();
       }
     }
@@ -604,8 +638,14 @@ export const kidLogin = async (req, res) => {
         kid: finalKid,
         name: finalName,
         email: finalEmail,
+        emailVerified: finalEmailVerified,
         phoneNumber: finalPhone,
+        phoneVerified: finalPhoneVerified,
         walletAddress: finalWallet,
+        telegramUsername: finalTelegramUsername,
+        telegramId: finalTelegramId,
+        picture: finalPicture,
+        preferredUsername: finalPreferredUsername,
         role: "CUSTOMER",
         status: "ACTIVE",
       });
@@ -622,6 +662,30 @@ export const kidLogin = async (req, res) => {
       }
       if (finalName && user.name !== finalName && !user.name.startsWith("Host")) {
         user.name = finalName;
+        hasChanges = true;
+      }
+      if (finalTelegramUsername && user.telegramUsername !== finalTelegramUsername) {
+        user.telegramUsername = finalTelegramUsername;
+        hasChanges = true;
+      }
+      if (finalTelegramId && user.telegramId !== finalTelegramId) {
+        user.telegramId = finalTelegramId;
+        hasChanges = true;
+      }
+      if (finalPicture && user.picture !== finalPicture) {
+        user.picture = finalPicture;
+        hasChanges = true;
+      }
+      if (finalPreferredUsername && user.preferredUsername !== finalPreferredUsername) {
+        user.preferredUsername = finalPreferredUsername;
+        hasChanges = true;
+      }
+      if (typeof finalEmailVerified === "boolean" && user.emailVerified !== finalEmailVerified) {
+        user.emailVerified = finalEmailVerified;
+        hasChanges = true;
+      }
+      if (typeof finalPhoneVerified === "boolean" && user.phoneVerified !== finalPhoneVerified) {
+        user.phoneVerified = finalPhoneVerified;
         hasChanges = true;
       }
       if (hasChanges) {
